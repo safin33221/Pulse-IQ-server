@@ -1,0 +1,83 @@
+enum NewsStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+
+  news      News[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NewsSource {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  baseUrl   String
+  isActive  Boolean  @default(true)
+
+  news      News[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+
+  news      NewsTopic[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model News {
+  id            String     @id @default(cuid())
+
+  title         String
+  summary       String?
+  content       String?
+
+  sourceUrl     String     @unique
+  imageUrl      String?
+
+  publishedAt   DateTime?
+  collectedAt   DateTime   @default(now())
+
+  status        NewsStatus @default(PUBLISHED)
+
+  categoryId    String
+  sourceId      String
+
+  category      Category   @relation(fields: [categoryId], references: [id])
+  source        NewsSource @relation(fields: [sourceId], references: [id])
+  topics        NewsTopic[]
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([categoryId])
+  @@index([sourceId])
+  @@index([publishedAt])
+  @@index([status])
+  @@index([collectedAt])
+}
+
+model NewsTopic {
+  newsId  String
+  topicId String
+
+  news    News  @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  topic   Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([newsId, topicId])
+  @@index([topicId])
+}
