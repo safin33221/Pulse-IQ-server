@@ -2,6 +2,23 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '@prisma/client';
 
+const safeUserSelect = {
+  id: true,
+  email: true,
+  username: true,
+  firstName: true,
+  lastName: true,
+  avatar: true,
+  bio: true,
+  role: true,
+  status: true,
+  emailVerified: true,
+  interests: true,
+  preferences: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.UserSelect;
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -38,22 +55,7 @@ export class UsersService {
       where: {
         id,
       },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        firstName: true,
-        lastName: true,
-        avatar: true,
-        bio: true,
-        role: true,
-        status: true,
-        emailVerified: true,
-        interests: true,
-        preferences: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: safeUserSelect,
     });
   }
 

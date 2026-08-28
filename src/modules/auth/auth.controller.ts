@@ -1,24 +1,32 @@
 import {
-  Controller,
-  Post,
   Body,
+  Controller,
+  Get,
   HttpCode,
   HttpStatus,
-  UseGuards,
-  Get,
+  Post,
+  Req,
   Res,
   UnauthorizedException,
-  Req,
+  UseGuards,
 } from '@nestjs/common';
-import express from 'express';
 
-import { AuthService } from './auth.service';
+import type { Request, Response } from 'express';
 
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '@/common/decorators/current-user.decorator';
+
+import {
+  ACCESS_TOKEN_COOKIE,
+  ACCESS_TOKEN_COOKIE_OPTIONS,
+  REFRESH_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE_OPTIONS,
+} from '@/common/constants/cookie.constants';
+
+import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -33,25 +41,18 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: express.Response,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    const { accessToken, safeUser, refreshToken } =
+    const { accessToken, refreshToken, safeUser } =
       await this.authService.login(dto);
 
-    res.cookie('access_token', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
-      path: '/',
-    });
-    res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/auth/refresh',
-    });
+    res.cookie(ACCESS_TOKEN_COOKIE, accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
+
+    res.cookie(
+      REFRESH_TOKEN_COOKIE,
+      refreshToken,
+      REFRESH_TOKEN_COOKIE_OPTIONS,
+    );
 
     return {
       user: safeUser,
@@ -62,13 +63,17 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
-    @Req()
-    req: express.Request & {
-      cookies?: { refresh_token?: string };
-    },
-    @Res({ passthrough: true }) res: express.Response,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.refresh_token;
+    const cookies: unknown = req.cookies;
+    const refreshToken: string | undefined =
+      typeof cookies === 'object' &&
+      cookies !== null &&
+      typeof (cookies as Record<string, unknown>)[REFRESH_TOKEN_COOKIE] ===
+        'string'
+        ? ((cookies as Record<string, unknown>)[REFRESH_TOKEN_COOKIE] as string)
+        : undefined;
 
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token not found');
@@ -76,21 +81,17 @@ export class AuthController {
 
     const tokens = await this.authService.refresh(refreshToken);
 
-    res.cookie('access_token', tokens.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
-      path: '/',
-    });
+    res.cookie(
+      ACCESS_TOKEN_COOKIE,
+      tokens.accessToken,
+      ACCESS_TOKEN_COOKIE_OPTIONS,
+    );
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/auth/refresh',
-    });
+    res.cookie(
+      REFRESH_TOKEN_COOKIE,
+      tokens.refreshToken,
+      REFRESH_TOKEN_COOKIE_OPTIONS,
+    );
 
     return {
       message: 'Token refreshed successfully',
@@ -108,23 +109,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async logout(
     @CurrentUser() user: CurrentUserPayload,
-    @Res({ passthrough: true }) res: express.Response,
+    @Res({ passthrough: true }) res: Response,
   ) {
     await this.authService.logout(user.userId);
 
-    res.clearCookie('access_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-    });
+    res.clearCookie(ACCESS_TOKEN_COOKIE, ACCESS_TOKEN_COOKIE_OPTIONS);
 
-    res.clearCookie('refresh_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/auth/refresh',
-    });
+    res.clearCookie(REFRESH_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE_OPTIONS);
 
     return {
       message: 'Logout successful',
