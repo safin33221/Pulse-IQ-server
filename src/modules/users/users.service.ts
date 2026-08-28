@@ -56,4 +56,23 @@ export class UsersService {
       },
     });
   }
+
+  async updateRefreshToken(userId: string, refreshToken: string) {
+    return this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        refreshToken,
+      },
+    });
+  }
+
+  async findByRefreshToken(refreshToken: string) {
+    return this.prisma.user.findFirst({
+      where: {
+        refreshToken,
+      },
+    });
+  }
 }
