@@ -14,12 +14,14 @@ interface FeedCollectionResult {
   fetched: number;
   collected: number;
   duplicates: number;
+  stale: number;
   failed: boolean;
 }
 @Injectable()
 export class NewsService {
   private readonly logger = new Logger(NewsService.name);
   private readonly RSS_CONCURRENCY = 10;
+  private readonly RSS_MAX_ARTICLE_AGE_MS = 24 * 60 * 60 * 1000;
 
   private isDuplicateSourceUrlError(error: unknown): boolean {
     if (typeof error !== 'object' || error === null || !('code' in error)) {
@@ -28,7 +30,15 @@ export class NewsService {
 
     return typeof error.code === 'string' && error.code === 'P2002';
   }
+  private isFreshArticle(article: CollectedArticle): boolean {
+    if (!article.publishedAt) {
+      return true;
+    }
 
+    const age = Date.now() - article.publishedAt.getTime();
+
+    return age <= this.RSS_MAX_ARTICLE_AGE_MS;
+  }
   constructor(
     private readonly prisma: PrismaService,
     private readonly rssCollector: RssCollector,
@@ -90,8 +100,14 @@ export class NewsService {
 
           let collected = 0;
           let duplicates = 0;
+          let stale = 0;
 
           for (const article of articles) {
+            if (!this.isFreshArticle(article)) {
+              stale++;
+              continue;
+            }
+
             const created = await this.saveArticle(article, feed.sourceId, feed.categoryId);
 
             if (created) {
@@ -107,6 +123,7 @@ export class NewsService {
             fetched: articles.length,
             collected,
             duplicates,
+            stale,
             failed: false,
           };
         } catch (error: unknown) {
@@ -122,6 +139,7 @@ export class NewsService {
             collected: 0,
             duplicates: 0,
             failed: true,
+            stale: 0,
           };
         }
       },
