@@ -15,6 +15,10 @@ export class RssCollector {
   private readonly logger = new Logger(RssCollector.name);
 
   private readonly parser = new Parser();
+
+  /**
+   * Maximum time allowed for an RSS request.
+   */
   private readonly timeoutMs = 10_000;
 
   async collect(feedUrl: string): Promise<CollectedArticle[]> {
@@ -27,6 +31,7 @@ export class RssCollector {
     try {
       const response = await fetch(feedUrl, {
         signal: controller.signal,
+
         headers: {
           'User-Agent': 'PulseIQ RSS Collector/1.0',
           Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
@@ -42,26 +47,33 @@ export class RssCollector {
       const feed = await this.parser.parseString(xml);
 
       return feed.items
-        .filter((item) => item.title && item.link)
+        .filter((item) => Boolean(item.title && item.link))
         .map((item) => ({
           title: item.title!.trim(),
+
           sourceUrl: item.link!.trim(),
+
           summary: item.contentSnippet?.trim() ?? null,
+
           content: item.content?.trim() ?? null,
+
           imageUrl: item.enclosure?.url ?? null,
+
           publishedAt: this.parseDate(item.pubDate),
         }));
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
-        this.logger.warn(`RSS feed timeout: ${feedUrl}`);
-      } else {
-        this.logger.error(
-          `Failed to collect RSS feed: ${feedUrl}`,
-          error instanceof Error ? error.stack : String(error),
-        );
+        this.logger.warn(`RSS feed timeout after ${this.timeoutMs}ms: ${feedUrl}`);
+
+        throw new Error(`RSS feed timeout after ${this.timeoutMs}ms`);
       }
 
-      return [];
+      this.logger.error(
+        `Failed to collect RSS feed: ${feedUrl}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      throw error;
     } finally {
       clearTimeout(timeout);
     }

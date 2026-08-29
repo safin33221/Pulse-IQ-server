@@ -5,6 +5,8 @@ import { PrismaService } from '@/database/prisma.service';
 import { NewsQueryDto } from './dto/news-query.dto';
 
 import { CollectedArticle, RssCollector } from './collectors/rss.collector';
+import { NewsRankingService } from './services/news-ranking.service';
+import { KeywordTopicExtractor } from './extractors/keyword-topic.extractor';
 
 interface FeedCollectionResult {
   feedId: string;
@@ -18,7 +20,7 @@ interface FeedCollectionResult {
 export class NewsService {
   private readonly logger = new Logger(NewsService.name);
   private readonly RSS_CONCURRENCY = 10;
-  private readonly RSS_TIMEOUT_MS = 10_000;
+
   private isDuplicateSourceUrlError(error: unknown): boolean {
     if (typeof error !== 'object' || error === null || !('code' in error)) {
       return false;
@@ -26,19 +28,12 @@ export class NewsService {
 
     return typeof error.code === 'string' && error.code === 'P2002';
   }
-  private async collectFeedWithTimeout(url: string): Promise<CollectedArticle[]> {
-    return Promise.race([
-      this.rssCollector.collect(url),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error(`RSS feed timeout after ${this.RSS_TIMEOUT_MS}ms`));
-        }, this.RSS_TIMEOUT_MS);
-      }),
-    ]);
-  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rssCollector: RssCollector,
+    private readonly newsRankingService: NewsRankingService,
+    private readonly topicExtractor: KeywordTopicExtractor,
   ) {}
   private async processWithConcurrency<T, R>(
     items: T[],
@@ -153,6 +148,25 @@ export class NewsService {
     categoryId: string,
   ): Promise<boolean> {
     try {
+      const topicSlugs = this.topicExtractor.extract(
+        article.title,
+        article.summary,
+        article.content,
+      );
+
+      const topics = topicSlugs.length
+        ? await this.prisma.topic.findMany({
+            where: {
+              slug: {
+                in: topicSlugs,
+              },
+            },
+            select: {
+              id: true,
+            },
+          })
+        : [];
+
       await this.prisma.news.create({
         data: {
           title: article.title,
@@ -161,13 +175,19 @@ export class NewsService {
           sourceUrl: article.sourceUrl,
           imageUrl: article.imageUrl,
           publishedAt: article.publishedAt,
+
           sourceId,
           categoryId,
+
           status: 'PUBLISHED',
+
+          topics: {
+            create: topics.map((topic) => ({
+              topicId: topic.id,
+            })),
+          },
         },
       });
-
-      this.logger.log(`New article: ${article.title}`);
 
       return true;
     } catch (error: unknown) {
@@ -180,6 +200,37 @@ export class NewsService {
     }
   }
 
+  async getForYou(query: NewsQueryDto) {
+    const { page = 1, limit = 20, category, source } = query;
+
+    const where = {
+      status: 'PUBLISHED' as const,
+
+      ...(category && {
+        category: {
+          slug: category,
+        },
+      }),
+
+      ...(source && {
+        source: {
+          slug: source,
+        },
+      }),
+    };
+
+    const result = await this.newsRankingService.getRankedNews(where, page, limit);
+
+    return {
+      data: result.data,
+      meta: {
+        page,
+        limit,
+        total: result.total,
+        totalPages: result.totalPages,
+      },
+    };
+  }
   async findAll(query: NewsQueryDto) {
     const { page = 1, limit = 20, category, source } = query;
 

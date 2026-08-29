@@ -11,6 +11,10 @@ export class NewsController {
   collectFromFeeds(): Promise<any> {
     return this.newsService.collectFromFeeds();
   }
+  @Get('for-you')
+  getForYou(@Query() query: NewsQueryDto) {
+    return this.newsService.getForYou(query);
+  }
 
   @Get()
   findAll(@Query() query: NewsQueryDto) {
