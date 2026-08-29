@@ -249,6 +249,67 @@ export class NewsService {
       },
     };
   }
+  async getLatest(query: NewsQueryDto) {
+    const { page = 1, limit = 20, category, source } = query;
+
+    const where = {
+      status: 'PUBLISHED' as const,
+
+      ...(category && {
+        category: {
+          slug: category,
+        },
+      }),
+
+      ...(source && {
+        source: {
+          slug: source,
+        },
+      }),
+    };
+
+    const [news, total] = await Promise.all([
+      this.prisma.news.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+
+        orderBy: [
+          {
+            publishedAt: 'desc',
+          },
+          {
+            createdAt: 'desc',
+          },
+        ],
+
+        include: {
+          category: true,
+          source: true,
+          topics: {
+            include: {
+              topic: true,
+            },
+          },
+        },
+      }),
+
+      this.prisma.news.count({
+        where,
+      }),
+    ]);
+
+    return {
+      data: news,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async findAll(query: NewsQueryDto) {
     const { page = 1, limit = 20, category, source } = query;
 

@@ -15,7 +15,10 @@ export class NewsController {
   getForYou(@Query() query: NewsQueryDto) {
     return this.newsService.getForYou(query);
   }
-
+  @Get('latest')
+  getLatest(@Query() query: NewsQueryDto) {
+    return this.newsService.getLatest(query);
+  }
   @Get()
   findAll(@Query() query: NewsQueryDto) {
     return this.newsService.findAll(query);
