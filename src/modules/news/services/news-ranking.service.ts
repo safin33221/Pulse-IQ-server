@@ -6,7 +6,7 @@ import { PrismaService } from '@/database/prisma.service';
 export class NewsRankingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getRankedNews(where: Record<string, unknown>, page: number, limit: number) {
+  async getRankedNews(where: object, page: number, limit: number) {
     const news = await this.prisma.news.findMany({
       where,
       include: {
@@ -18,55 +18,73 @@ export class NewsRankingService {
           },
         },
       },
+      orderBy: [
+        {
+          publishedAt: 'desc',
+        },
+        {
+          createdAt: 'desc',
+        },
+      ],
     });
 
-    const rankedNews = news
-      .map((article) => ({
-        article,
-        score: this.calculateScore(article),
-      }))
+    const ranked = news
+      .map((article) => {
+        const freshnessScore = this.calculateFreshnessScore(article.publishedAt);
+
+        const topicScore = this.calculateTopicScore(article.topics.length);
+
+        const categoryScore = this.calculateCategoryScore(article.category.slug);
+
+        const score = freshnessScore * 0.6 + topicScore * 0.25 + categoryScore * 0.15;
+
+        return {
+          article,
+          score,
+        };
+      })
       .sort((a, b) => b.score - a.score);
 
-    const start = (page - 1) * limit;
+    const total = ranked.length;
+    const skip = (page - 1) * limit;
 
     return {
-      data: rankedNews.slice(start, start + limit).map(({ article }) => article),
-      total: news.length,
-      totalPages: Math.ceil(news.length / limit),
+      data: ranked.slice(skip, skip + limit).map(({ article }) => article),
+
+      total,
+
+      totalPages: Math.ceil(total / limit),
     };
   }
 
-  private calculateScore(article: {
-    publishedAt: Date | null;
-    collectedAt: Date;
-    topics: Array<{
-      topic: {
-        id: string;
-        name: string;
-        slug: string;
-      };
-    }>;
-  }): number {
-    const freshnessScore = this.calculateFreshnessScore(article.publishedAt, article.collectedAt);
-
-    const topicScore = this.calculateTopicScore(article.topics.length);
-
-    return freshnessScore * 0.8 + topicScore * 0.2;
-  }
-
-  private calculateFreshnessScore(publishedAt: Date | null, collectedAt: Date): number {
-    const referenceDate = publishedAt ?? collectedAt;
-
-    const ageInHours = Math.max(0, Date.now() - referenceDate.getTime()) / (1000 * 60 * 60);
-
-    return Math.max(0, 100 * Math.exp(-ageInHours / 24));
-  }
-
-  private calculateTopicScore(topicCount: number): number {
-    if (topicCount === 0) {
+  private calculateFreshnessScore(publishedAt: Date | null): number {
+    if (!publishedAt) {
       return 0;
     }
 
-    return Math.min(topicCount * 20, 100);
+    const ageHours = (Date.now() - publishedAt.getTime()) / (1000 * 60 * 60);
+
+    if (ageHours <= 1) return 100;
+    if (ageHours <= 6) return 90;
+    if (ageHours <= 12) return 80;
+    if (ageHours <= 24) return 70;
+    if (ageHours <= 48) return 50;
+    if (ageHours <= 72) return 30;
+
+    return 10;
+  }
+
+  private calculateTopicScore(topicCount: number): number {
+    if (topicCount >= 5) return 100;
+    if (topicCount >= 3) return 80;
+    if (topicCount >= 1) return 60;
+
+    return 20;
+  }
+
+  private calculateCategoryScore(categorySlug: string): number {
+    // Temporary baseline.
+    // User-specific category preference will be added later.
+    return categorySlug ? 50 : 0;
   }
 }

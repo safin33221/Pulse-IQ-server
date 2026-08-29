@@ -5,5 +5,3 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
-
-

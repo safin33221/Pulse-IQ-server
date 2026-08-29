@@ -22,19 +22,50 @@ export async function seedNewsSources(prisma: PrismaClient) {
       slug: 'the-verge',
       baseUrl: 'https://www.theverge.com',
     },
+    {
+      name: 'Ars Technica',
+      slug: 'ars-technica',
+      baseUrl: 'https://arstechnica.com',
+    },
+    {
+      name: 'WIRED',
+      slug: 'wired',
+      baseUrl: 'https://www.wired.com',
+    },
+    {
+      name: 'IEEE Spectrum',
+      slug: 'ieee-spectrum',
+      baseUrl: 'https://spectrum.ieee.org',
+    },
+    {
+      name: 'NIST',
+      slug: 'nist',
+      baseUrl: 'https://www.nist.gov',
+    },
+    {
+      name: 'European Space Agency',
+      slug: 'esa',
+      baseUrl: 'https://www.esa.int',
+    },
+    {
+      name: 'ScienceDaily',
+      slug: 'sciencedaily',
+      baseUrl: 'https://www.sciencedaily.com',
+    },
   ];
 
   for (const source of sources) {
-    // Prisma's generated delegate type may be unavailable to the linter in seed files.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await prisma.newsSource.upsert({
       where: {
         slug: source.slug,
       },
-      update: {},
+      update: {
+        name: source.name,
+        baseUrl: source.baseUrl,
+      },
       create: source,
     });
   }
 
-  console.log('News sources seeded');
+  console.log(`News sources seeded: ${sources.length}`);
 }

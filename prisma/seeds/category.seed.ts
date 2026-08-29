@@ -7,8 +7,16 @@ export async function seedCategories(prisma: PrismaClient) {
       slug: 'technology',
     },
     {
+      name: 'AI',
+      slug: 'ai',
+    },
+    {
       name: 'Business',
       slug: 'business',
+    },
+    {
+      name: 'Finance',
+      slug: 'finance',
     },
     {
       name: 'Science',
@@ -19,6 +27,14 @@ export async function seedCategories(prisma: PrismaClient) {
       slug: 'world',
     },
     {
+      name: 'Politics',
+      slug: 'politics',
+    },
+    {
+      name: 'Health',
+      slug: 'health',
+    },
+    {
       name: 'Sports',
       slug: 'sports',
     },
@@ -26,19 +42,39 @@ export async function seedCategories(prisma: PrismaClient) {
       name: 'Entertainment',
       slug: 'entertainment',
     },
+    {
+      name: 'Gaming',
+      slug: 'gaming',
+    },
+    {
+      name: 'Cybersecurity',
+      slug: 'cybersecurity',
+    },
+    {
+      name: 'Space',
+      slug: 'space',
+    },
+    {
+      name: 'Climate',
+      slug: 'climate',
+    },
+    {
+      name: 'Startups',
+      slug: 'startups',
+    },
   ];
 
   for (const category of categories) {
-    // Prisma's generated delegate may be unresolved by the static analyzer.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await prisma.category.upsert({
       where: {
         slug: category.slug,
       },
-      update: {},
+      update: {
+        name: category.name,
+      },
       create: category,
     });
   }
 
-  console.log('Categories seeded');
+  console.log(`Categories seeded: ${categories.length}`);
 }

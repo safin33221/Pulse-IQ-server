@@ -1,39 +1,37 @@
 model User {
-  id            String     @id @default(uuid())
+  id String @id @default(uuid())
 
   // Authentication
-  email         String     @unique
-  password      String?
-  username      String?    @unique
+  email    String  @unique
+  password String?
+  username String? @unique
 
   // Profile
-  firstName     String?
-  lastName      String?
-  avatar        String?
-  bio           String?
+  firstName String?
+  lastName  String?
+  avatar    String?
+  bio       String?
 
   // Authorization
-  role          UserRole   @default(USER)
-  status        UserStatus @default(ACTIVE)
+  role   UserRole   @default(USER)
+  status UserStatus @default(ACTIVE)
 
   // Security
-  emailVerified Boolean    @default(false)
+  emailVerified Boolean   @default(false)
   lastLoginAt   DateTime?
   refreshToken  String?
 
-
   // Soft delete
-  deletedAt     DateTime?
+  deletedAt DateTime?
 
   // AI personalization
-  interests       String[]
-  preferences     Json?
-
-
+  interests   String[]
+  preferences Json?
 
   // Timestamps
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  newsInteractions NewsInteraction[]
 
   @@index([email])
   @@index([username])
