@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { NewsService } from '../news.service';
 
@@ -7,21 +7,34 @@ import { NewsService } from '../news.service';
 export class NewsScheduler {
   private readonly logger = new Logger(NewsScheduler.name);
 
+  private isRunning = false;
+
   constructor(private readonly newsService: NewsService) {}
 
-  @Cron('*/30 * * * *')
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async collectNews(): Promise<void> {
-    this.logger.log('Starting scheduled news collection...');
+    if (this.isRunning) {
+      this.logger.warn('News collection already running. Skipping...');
+      return;
+    }
+
+    this.isRunning = true;
 
     try {
+      this.logger.log('Starting scheduled news collection...');
+
       const result = await this.newsService.collectFromFeeds();
 
-      this.logger.log(`News collection completed: ${result.collected} new articles`);
+      this.logger.log(
+        `Collection completed: ${result.collected} articles from ${result.feeds} feeds`,
+      );
     } catch (error: unknown) {
       this.logger.error(
-        'News collection failed',
+        'Scheduled news collection failed',
         error instanceof Error ? error.stack : String(error),
       );
+    } finally {
+      this.isRunning = false;
     }
   }
 }

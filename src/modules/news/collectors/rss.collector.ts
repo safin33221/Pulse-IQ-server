@@ -4,9 +4,10 @@ import Parser from 'rss-parser';
 export interface CollectedArticle {
   title: string;
   sourceUrl: string;
-  summary?: string;
-  imageUrl?: string;
-  publishedAt?: Date;
+  summary: string | null;
+  content: string | null;
+  imageUrl: string | null;
+  publishedAt: Date | null;
 }
 
 @Injectable()
@@ -14,27 +15,65 @@ export class RssCollector {
   private readonly logger = new Logger(RssCollector.name);
 
   private readonly parser = new Parser();
+  private readonly timeoutMs = 10_000;
 
   async collect(feedUrl: string): Promise<CollectedArticle[]> {
+    const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, this.timeoutMs);
+
     try {
-      const feed = await this.parser.parseURL(feedUrl);
+      const response = await fetch(feedUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'PulseIQ RSS Collector/1.0',
+          Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`RSS request failed with status ${response.status}`);
+      }
+
+      const xml = await response.text();
+
+      const feed = await this.parser.parseString(xml);
 
       return feed.items
-        .filter((item) => Boolean(item.title) && Boolean(item.link))
+        .filter((item) => item.title && item.link)
         .map((item) => ({
-          title: item.title!,
-          sourceUrl: item.link!,
-          summary: item.contentSnippet,
-          imageUrl: item.enclosure?.url,
-          publishedAt: item.pubDate ? new Date(item.pubDate) : undefined,
+          title: item.title!.trim(),
+          sourceUrl: item.link!.trim(),
+          summary: item.contentSnippet?.trim() ?? null,
+          content: item.content?.trim() ?? null,
+          imageUrl: item.enclosure?.url ?? null,
+          publishedAt: this.parseDate(item.pubDate),
         }));
     } catch (error: unknown) {
-      this.logger.error(
-        `Failed to collect feed: ${feedUrl}`,
-        error instanceof Error ? error.stack : String(error),
-      );
+      if (error instanceof Error && error.name === 'AbortError') {
+        this.logger.warn(`RSS feed timeout: ${feedUrl}`);
+      } else {
+        this.logger.error(
+          `Failed to collect RSS feed: ${feedUrl}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
 
       return [];
+    } finally {
+      clearTimeout(timeout);
     }
+  }
+
+  private parseDate(value?: string): Date | null {
+    if (!value) {
+      return null;
+    }
+
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 }

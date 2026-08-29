@@ -4,81 +4,94 @@ enum NewsStatus {
   ARCHIVED
 }
 
-model Category {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
+enum NewsProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
 
-  news      News[]
+model Category {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  feeds NewsFeed[]
+  news  News[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model NewsSource {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  baseUrl   String
-  isActive  Boolean  @default(true)
+  id       String  @id @default(cuid())
+  name     String  @unique
+  slug     String  @unique
+  baseUrl  String
+  isActive Boolean @default(true)
 
-  feeds     NewsFeed[]
-  news      News[]
+  feeds NewsFeed[]
+  news  News[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model NewsFeed {
-  id        String   @id @default(cuid())
-  name      String
-  url       String   @unique
-  isActive  Boolean  @default(true)
+  id       String  @id @default(cuid())
+  name     String
+  url      String  @unique
+  isActive Boolean @default(true)
 
-  sourceId  String
-  source    NewsSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId String
+  source   NewsSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId String
 
   @@index([sourceId])
+  @@index([isActive])
 }
 
 model Topic {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
 
-  news      NewsTopic[]
+  news NewsTopic[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model News {
-  id          String     @id @default(cuid())
-  title       String
-  summary     String?
-  content     String?
-  sourceUrl   String     @unique
-  imageUrl    String?
+  id        String  @id @default(cuid())
+  title     String
+  summary   String?
+  content   String?
+  sourceUrl String  @unique
+  imageUrl  String?
 
   publishedAt DateTime?
-  collectedAt DateTime   @default(now())
+  collectedAt DateTime  @default(now())
 
-  status      NewsStatus @default(PUBLISHED)
+  status           NewsStatus           @default(PUBLISHED)
+  processingStatus NewsProcessingStatus @default(PENDING)
 
-  categoryId  String
-  sourceId    String
+  categoryId String
+  sourceId   String
 
-  category    Category   @relation(fields: [categoryId], references: [id])
-  source      NewsSource @relation(fields: [sourceId], references: [id])
+  category Category   @relation(fields: [categoryId], references: [id])
+  source   NewsSource @relation(fields: [sourceId], references: [id])
 
-  topics      NewsTopic[]
+  topics NewsTopic[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@index([processingStatus])
   @@index([categoryId])
   @@index([sourceId])
   @@index([publishedAt])
@@ -90,8 +103,8 @@ model NewsTopic {
   newsId  String
   topicId String
 
-  news    News  @relation(fields: [newsId], references: [id], onDelete: Cascade)
-  topic   Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  news  News  @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@id([newsId, topicId])
   @@index([topicId])

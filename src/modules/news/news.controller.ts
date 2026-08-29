@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query } from '@nestjs/common';
 
 import { NewsService } from './news.service';
 import { NewsQueryDto } from './dto/news-query.dto';
@@ -6,6 +6,11 @@ import { NewsQueryDto } from './dto/news-query.dto';
 @Controller('news')
 export class NewsController {
   constructor(private readonly newsService: NewsService) {}
+
+  @Post('collect')
+  collectFromFeeds(): Promise<any> {
+    return this.newsService.collectFromFeeds();
+  }
 
   @Get()
   findAll(@Query() query: NewsQueryDto) {
