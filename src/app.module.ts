@@ -12,6 +12,7 @@ import { NewsModule } from './modules/news/news.module';
 import { UsersModule } from './modules/users/users.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { createKeyv } from '@keyv/redis';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { createKeyv } from '@keyv/redis';
     AuthModule,
     UsersModule,
     NewsModule,
+    HealthModule,
   ],
 
   controllers: [AppController],
