@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '@/database/prisma.service';
 
@@ -7,6 +7,8 @@ import { NewsQueryDto } from './dto/news-query.dto';
 import { CollectedArticle, RssCollector } from './collectors/rss.collector';
 import { KeywordTopicExtractor } from './extractors/keyword-topic.extractor';
 import { NewsRankingService } from './services/news-ranking.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 
 interface FeedCollectionResult {
   feedId: string;
@@ -23,11 +25,17 @@ export class NewsService {
 
   private readonly RSS_CONCURRENCY = 10;
 
+  private readonly LATEST_CACHE_PREFIX = 'news:latest';
+  private readonly LATEST_CACHE_TTL = 60_000;
+  private latestCacheVersion = 1;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rssCollector: RssCollector,
     private readonly newsRankingService: NewsRankingService,
     private readonly topicExtractor: KeywordTopicExtractor,
+    @Inject(CACHE_MANAGER)
+    private readonly cache: Cache,
   ) {}
 
   private isDuplicateSourceUrlError(error: unknown): boolean {
@@ -90,7 +98,11 @@ export class NewsService {
 
     return results;
   }
+  private invalidateLatestCache(): void {
+    this.latestCacheVersion++;
 
+    this.logger.debug(`Latest news cache invalidated. New version: ${this.latestCacheVersion}`);
+  }
   async collectFromFeeds() {
     const feeds = await this.prisma.newsFeed.findMany({
       where: {
@@ -156,7 +168,7 @@ export class NewsService {
       },
     );
 
-    return {
+    const response = {
       feeds: feeds.length,
 
       fetched: results.reduce((total, result) => total + result.fetched, 0),
@@ -169,6 +181,10 @@ export class NewsService {
 
       feedResults: results,
     };
+    if (response.collected > 0) {
+      this.invalidateLatestCache();
+    }
+    return response;
   }
 
   private async saveArticle(
@@ -250,14 +266,48 @@ export class NewsService {
   }
 
   async getLatest(query: NewsQueryDto) {
-    const { page = 1, limit = 20 } = query;
+    const { page = 1, limit = 20, category, source } = query;
+
+    const cacheKey = [
+      'news:latest',
+      `v:${this.latestCacheVersion}`,
+      `page:${page}`,
+      `limit:${limit}`,
+      `category:${category ?? 'all'}`,
+      `source:${source ?? 'all'}`,
+    ].join(':');
+
+    type NewsData = Awaited<ReturnType<typeof this.prisma.news.findMany>>;
+    type CacheData = {
+      data: NewsData;
+      meta: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    };
+
+    try {
+      const cached = await this.cache.get<CacheData>(cacheKey);
+
+      if (cached) {
+        this.logger.debug(`Latest news cache hit: ${cacheKey}`);
+        return cached;
+      }
+
+      this.logger.debug(`Latest news cache miss: ${cacheKey}`);
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Redis cache read failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
     const where = this.buildNewsWhere(query);
 
     const [news, total] = await Promise.all([
       this.prisma.news.findMany({
         where,
-
         skip: (page - 1) * limit,
         take: limit,
 
@@ -286,7 +336,7 @@ export class NewsService {
       }),
     ]);
 
-    return {
+    const result = {
       data: news,
       meta: {
         page,
@@ -295,6 +345,16 @@ export class NewsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+
+    try {
+      await this.cache.set(cacheKey, result, this.LATEST_CACHE_TTL);
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Redis cache write failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    return result;
   }
 
   async findAll(query: NewsQueryDto) {

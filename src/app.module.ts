@@ -10,13 +10,20 @@ import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { NewsModule } from './modules/news/news.module';
 import { UsersModule } from './modules/users/users.module';
+import { CacheModule } from '@nestjs/cache-manager';
+import { createKeyv } from '@keyv/redis';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useFactory: () => ({
+        stores: [createKeyv(process.env.REDIS_URL ?? 'redis://localhost:6379')],
+      }),
+    }),
     ThrottlerModule.forRoot({
       throttlers: [
         {
