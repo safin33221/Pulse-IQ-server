@@ -499,12 +499,11 @@ export class NewsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOneBySlug(slug: string) {
     const news = await this.prisma.news.findUnique({
       where: {
-        id,
+        id: slug,
       },
-
       include: {
         category: true,
         source: true,
@@ -517,7 +516,7 @@ export class NewsService {
     });
 
     if (!news) {
-      throw new NotFoundException('News not found');
+      throw new NotFoundException('News article not found');
     }
 
     return news;
