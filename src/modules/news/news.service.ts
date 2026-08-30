@@ -427,7 +427,7 @@ export class NewsService {
   async findFeed(query: NewsQueryDto, userId?: string) {
     const { category = 'foryou', page = 1, limit = 20 } = query;
 
-    // Personalized feed
+    // For You feed
     if (category === 'foryou') {
       if (!userId) {
         throw new UnauthorizedException('Authentication required for For You feed');
@@ -436,12 +436,25 @@ export class NewsService {
       return this.newsRankingService.getPersonalizedFeed(userId, page, limit);
     }
 
-    // Category feed
-    const where = {
-      status: 'PUBLISHED' as const,
-      category: {
+    // Validate category from database
+    const categoryRecord = await this.prisma.category.findUnique({
+      where: {
         slug: category,
       },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+    });
+
+    if (!categoryRecord) {
+      throw new NotFoundException(`Category '${category}' not found`);
+    }
+
+    const where = {
+      status: 'PUBLISHED' as const,
+      categoryId: categoryRecord.id,
     };
 
     const [news, total] = await Promise.all([

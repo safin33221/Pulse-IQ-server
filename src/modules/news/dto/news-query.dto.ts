@@ -1,10 +1,9 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class NewsQueryDto {
   @IsOptional()
   @IsString()
-  @IsIn(['foryou', 'technology', 'business', 'politics', 'science'])
   category?: string;
 
   @IsOptional()

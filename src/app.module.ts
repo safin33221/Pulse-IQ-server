@@ -13,6 +13,7 @@ import { UsersModule } from './modules/users/users.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { createKeyv } from '@keyv/redis';
 import { HealthModule } from './health/health.module';
+import { CategoryModule } from './modules/category/category.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { HealthModule } from './health/health.module';
     UsersModule,
     NewsModule,
     HealthModule,
+    CategoryModule,
   ],
 
   controllers: [AppController],
