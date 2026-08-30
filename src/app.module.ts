@@ -1,25 +1,49 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { UsersModule } from './modules/users/users.module';
-import { ConfigModule } from '@nestjs/config';
 import { NewsModule } from './modules/news/news.module';
-import { ScheduleModule } from '@nestjs/schedule';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
-    PrismaModule,
-    AuthModule,
-    UsersModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'default',
+          ttl: 60_000,
+          limit: 60,
+        },
+      ],
+    }),
+
+    ScheduleModule.forRoot(),
+
+    PrismaModule,
+    AuthModule,
+    UsersModule,
     NewsModule,
   ],
+
   controllers: [AppController],
-  providers: [AppService],
+
+  providers: [
+    AppService,
+
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

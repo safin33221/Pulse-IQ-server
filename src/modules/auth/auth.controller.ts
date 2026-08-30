@@ -27,11 +27,17 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
+  @Throttle({
+    default: {
+      limit: 10,
+      ttl: 60_000,
+    },
+  })
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -39,20 +45,12 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const { accessToken, refreshToken, safeUser } =
-      await this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    const { accessToken, refreshToken, safeUser } = await this.authService.login(dto);
 
     res.cookie(ACCESS_TOKEN_COOKIE, accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
 
-    res.cookie(
-      REFRESH_TOKEN_COOKIE,
-      refreshToken,
-      REFRESH_TOKEN_COOKIE_OPTIONS,
-    );
+    res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, REFRESH_TOKEN_COOKIE_OPTIONS);
 
     return {
       user: safeUser,
@@ -62,16 +60,12 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  async refresh(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const cookies: unknown = req.cookies;
     const refreshToken: string | undefined =
       typeof cookies === 'object' &&
       cookies !== null &&
-      typeof (cookies as Record<string, unknown>)[REFRESH_TOKEN_COOKIE] ===
-        'string'
+      typeof (cookies as Record<string, unknown>)[REFRESH_TOKEN_COOKIE] === 'string'
         ? ((cookies as Record<string, unknown>)[REFRESH_TOKEN_COOKIE] as string)
         : undefined;
 
@@ -81,17 +75,9 @@ export class AuthController {
 
     const tokens = await this.authService.refresh(refreshToken);
 
-    res.cookie(
-      ACCESS_TOKEN_COOKIE,
-      tokens.accessToken,
-      ACCESS_TOKEN_COOKIE_OPTIONS,
-    );
+    res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
 
-    res.cookie(
-      REFRESH_TOKEN_COOKIE,
-      tokens.refreshToken,
-      REFRESH_TOKEN_COOKIE_OPTIONS,
-    );
+    res.cookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, REFRESH_TOKEN_COOKIE_OPTIONS);
 
     return {
       message: 'Token refreshed successfully',
@@ -107,10 +93,7 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async logout(
-    @CurrentUser() user: CurrentUserPayload,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@CurrentUser() user: CurrentUserPayload, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.userId);
 
     res.clearCookie(ACCESS_TOKEN_COOKIE, ACCESS_TOKEN_COOKIE_OPTIONS);
