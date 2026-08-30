@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 import { PrismaService } from '@/database/prisma.service';
 
@@ -34,6 +40,7 @@ export class NewsService {
     private readonly rssCollector: RssCollector,
     private readonly newsRankingService: NewsRankingService,
     private readonly topicExtractor: KeywordTopicExtractor,
+
     @Inject(CACHE_MANAGER)
     private readonly cache: Cache,
   ) {}
@@ -240,6 +247,18 @@ export class NewsService {
       if (this.isDuplicateSourceUrlError(error)) {
         this.logger.debug(`Duplicate article: ${article.sourceUrl}`);
 
+        if (article.imageUrl) {
+          await this.prisma.news.updateMany({
+            where: {
+              sourceUrl: article.sourceUrl,
+              imageUrl: null,
+            },
+            data: {
+              imageUrl: article.imageUrl,
+            },
+          });
+        }
+
         return false;
       }
 
@@ -366,6 +385,68 @@ export class NewsService {
       this.prisma.news.findMany({
         where,
 
+        skip: (page - 1) * limit,
+        take: limit,
+
+        orderBy: [
+          {
+            publishedAt: 'desc',
+          },
+          {
+            createdAt: 'desc',
+          },
+        ],
+
+        include: {
+          category: true,
+          source: true,
+          topics: {
+            include: {
+              topic: true,
+            },
+          },
+        },
+      }),
+
+      this.prisma.news.count({
+        where,
+      }),
+    ]);
+
+    return {
+      data: news,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findFeed(query: NewsQueryDto, userId?: string) {
+    const { category = 'foryou', page = 1, limit = 20 } = query;
+
+    // Personalized feed
+    if (category === 'foryou') {
+      if (!userId) {
+        throw new UnauthorizedException('Authentication required for For You feed');
+      }
+
+      return this.newsRankingService.getPersonalizedFeed(userId, page, limit);
+    }
+
+    // Category feed
+    const where = {
+      status: 'PUBLISHED' as const,
+      category: {
+        slug: category,
+      },
+    };
+
+    const [news, total] = await Promise.all([
+      this.prisma.news.findMany({
+        where,
         skip: (page - 1) * limit,
         take: limit,
 

@@ -57,6 +57,80 @@ export class NewsRankingService {
     };
   }
 
+  async getPersonalizedFeed(userId: string, page: number, limit: number) {
+    // TODO:
+    // Replace this with actual user preference / interaction
+    // based ranking when those tables are implemented.
+
+    const news = await this.prisma.news.findMany({
+      where: {
+        status: 'PUBLISHED',
+      },
+
+      include: {
+        category: true,
+        source: true,
+        topics: {
+          include: {
+            topic: true,
+          },
+        },
+      },
+
+      orderBy: [
+        {
+          publishedAt: 'desc',
+        },
+        {
+          createdAt: 'desc',
+        },
+      ],
+    });
+
+    const ranked = news
+      .map((article) => {
+        const freshnessScore = this.calculateFreshnessScore(article.publishedAt);
+
+        const topicScore = this.calculateTopicScore(article.topics.length);
+
+        const categoryScore = this.calculateCategoryScore(article.category.slug);
+
+        // Temporary personalization.
+        // userId is intentionally accepted so this method can later
+        // use user preferences/interactions.
+        const personalizationScore = this.calculatePersonalizationScore(
+          userId,
+          article.category.slug,
+        );
+
+        const score =
+          freshnessScore * 0.5 +
+          topicScore * 0.2 +
+          categoryScore * 0.1 +
+          personalizationScore * 0.2;
+
+        return {
+          article,
+          score,
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const total = ranked.length;
+    const skip = (page - 1) * limit;
+
+    return {
+      data: ranked.slice(skip, skip + limit).map(({ article }) => article),
+
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   private calculateFreshnessScore(publishedAt: Date | null): number {
     if (!publishedAt) {
       return 0;
@@ -83,8 +157,18 @@ export class NewsRankingService {
   }
 
   private calculateCategoryScore(categorySlug: string): number {
-    // Temporary baseline.
-    // User-specific category preference will be added later.
     return categorySlug ? 50 : 0;
+  }
+
+  private calculatePersonalizationScore(_userId: string, _categorySlug: string): number {
+    // Temporary baseline.
+    // Later this should use:
+    // - followed categories
+    // - followed topics
+    // - reading history
+    // - likes/bookmarks
+    // - user interests
+
+    return 50;
   }
 }

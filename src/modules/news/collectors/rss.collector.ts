@@ -10,11 +10,30 @@ export interface CollectedArticle {
   publishedAt: Date | null;
 }
 
+type RssMedia = {
+  $?: {
+    url?: string;
+  };
+  url?: string;
+};
+
+type RssItem = {
+  mediaContent?: RssMedia[];
+  mediaThumbnail?: RssMedia[];
+};
+
 @Injectable()
 export class RssCollector {
   private readonly logger = new Logger(RssCollector.name);
 
-  private readonly parser = new Parser();
+  private readonly parser = new Parser<object, RssItem>({
+    customFields: {
+      item: [
+        ['media:content', 'mediaContent', { keepArray: true }],
+        ['media:thumbnail', 'mediaThumbnail', { keepArray: true }],
+      ],
+    },
+  });
 
   private readonly timeoutMs = 10_000;
   private readonly maxRetries = 2;
@@ -98,8 +117,7 @@ export class RssCollector {
 
           content: typeof item.content === 'string' ? item.content.trim() || null : null,
 
-          imageUrl:
-            typeof item.enclosure?.url === 'string' ? item.enclosure.url.trim() || null : null,
+          imageUrl: this.extractImageUrl(item, item.link!),
 
           publishedAt: this.parseDate(item.pubDate ?? item.isoDate),
         }));
@@ -141,6 +159,52 @@ export class RssCollector {
     const date = new Date(value);
 
     return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private extractImageUrl(item: RssItem & Parser.Item, articleUrl: string): string | null {
+    const candidates = [
+      item.enclosure?.url,
+      ...this.getMediaUrls(item.mediaContent),
+      ...this.getMediaUrls(item.mediaThumbnail),
+      this.getImageUrlFromHtml(item.content),
+      this.getImageUrlFromHtml(item.contentSnippet),
+    ];
+
+    for (const candidate of candidates) {
+      const normalizedUrl = this.normalizeImageUrl(candidate, articleUrl);
+
+      if (normalizedUrl) {
+        return normalizedUrl;
+      }
+    }
+
+    return null;
+  }
+
+  private getMediaUrls(media?: RssMedia[]): Array<string | undefined> {
+    return media?.map((entry) => entry.$?.url ?? entry.url) ?? [];
+  }
+
+  private getImageUrlFromHtml(html?: string): string | undefined {
+    if (!html) {
+      return undefined;
+    }
+
+    return html.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
+  }
+
+  private normalizeImageUrl(value: string | undefined, baseUrl: string): string | null {
+    if (!value) {
+      return null;
+    }
+
+    try {
+      const url = new URL(value.trim(), baseUrl);
+
+      return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+    } catch {
+      return null;
+    }
   }
 }
 
