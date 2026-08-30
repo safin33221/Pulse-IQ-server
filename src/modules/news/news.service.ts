@@ -5,8 +5,8 @@ import { PrismaService } from '@/database/prisma.service';
 import { NewsQueryDto } from './dto/news-query.dto';
 
 import { CollectedArticle, RssCollector } from './collectors/rss.collector';
-import { NewsRankingService } from './services/news-ranking.service';
 import { KeywordTopicExtractor } from './extractors/keyword-topic.extractor';
+import { NewsRankingService } from './services/news-ranking.service';
 
 interface FeedCollectionResult {
   feedId: string;
@@ -16,10 +16,19 @@ interface FeedCollectionResult {
   duplicates: number;
   failed: boolean;
 }
+
 @Injectable()
 export class NewsService {
   private readonly logger = new Logger(NewsService.name);
+
   private readonly RSS_CONCURRENCY = 10;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rssCollector: RssCollector,
+    private readonly newsRankingService: NewsRankingService,
+    private readonly topicExtractor: KeywordTopicExtractor,
+  ) {}
 
   private isDuplicateSourceUrlError(error: unknown): boolean {
     if (typeof error !== 'object' || error === null || !('code' in error)) {
@@ -29,17 +38,37 @@ export class NewsService {
     return typeof error.code === 'string' && error.code === 'P2002';
   }
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly rssCollector: RssCollector,
-    private readonly newsRankingService: NewsRankingService,
-    private readonly topicExtractor: KeywordTopicExtractor,
-  ) {}
+  private buildNewsWhere(query: NewsQueryDto) {
+    const { category, source } = query;
+
+    return {
+      status: 'PUBLISHED' as const,
+
+      ...(category && {
+        category: {
+          slug: category,
+        },
+      }),
+
+      ...(source && {
+        source: {
+          slug: source,
+        },
+      }),
+    };
+  }
+
   private async processWithConcurrency<T, R>(
     items: T[],
     concurrency: number,
     handler: (item: T) => Promise<R>,
   ): Promise<R[]> {
+    if (items.length === 0) {
+      return [];
+    }
+
+    const workerCount = Math.min(Math.max(1, concurrency), items.length);
+
     const results: R[] = [];
     let index = 0;
 
@@ -55,7 +84,7 @@ export class NewsService {
       }
     };
 
-    const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
+    const workers = Array.from({ length: workerCount }, () => worker());
 
     await Promise.all(workers);
 
@@ -154,18 +183,19 @@ export class NewsService {
         article.content,
       );
 
-      const topics = topicSlugs.length
-        ? await this.prisma.topic.findMany({
-            where: {
-              slug: {
-                in: topicSlugs,
+      const topics =
+        topicSlugs.length > 0
+          ? await this.prisma.topic.findMany({
+              where: {
+                slug: {
+                  in: topicSlugs,
+                },
               },
-            },
-            select: {
-              id: true,
-            },
-          })
-        : [];
+              select: {
+                id: true,
+              },
+            })
+          : [];
 
       await this.prisma.news.create({
         data: {
@@ -193,6 +223,7 @@ export class NewsService {
     } catch (error: unknown) {
       if (this.isDuplicateSourceUrlError(error)) {
         this.logger.debug(`Duplicate article: ${article.sourceUrl}`);
+
         return false;
       }
 
@@ -201,23 +232,9 @@ export class NewsService {
   }
 
   async getForYou(query: NewsQueryDto) {
-    const { page = 1, limit = 20, category, source } = query;
+    const { page = 1, limit = 20 } = query;
 
-    const where = {
-      status: 'PUBLISHED' as const,
-
-      ...(category && {
-        category: {
-          slug: category,
-        },
-      }),
-
-      ...(source && {
-        source: {
-          slug: source,
-        },
-      }),
-    };
+    const where = this.buildNewsWhere(query);
 
     const result = await this.newsRankingService.getRankedNews(where, page, limit);
 
@@ -231,28 +248,16 @@ export class NewsService {
       },
     };
   }
+
   async getLatest(query: NewsQueryDto) {
-    const { page = 1, limit = 20, category, source } = query;
+    const { page = 1, limit = 20 } = query;
 
-    const where = {
-      status: 'PUBLISHED' as const,
-
-      ...(category && {
-        category: {
-          slug: category,
-        },
-      }),
-
-      ...(source && {
-        source: {
-          slug: source,
-        },
-      }),
-    };
+    const where = this.buildNewsWhere(query);
 
     const [news, total] = await Promise.all([
       this.prisma.news.findMany({
         where,
+
         skip: (page - 1) * limit,
         take: limit,
 
@@ -293,33 +298,25 @@ export class NewsService {
   }
 
   async findAll(query: NewsQueryDto) {
-    const { page = 1, limit = 20, category, source } = query;
+    const { page = 1, limit = 20 } = query;
 
-    const where = {
-      status: 'PUBLISHED' as const,
-
-      ...(category && {
-        category: {
-          slug: category,
-        },
-      }),
-
-      ...(source && {
-        source: {
-          slug: source,
-        },
-      }),
-    };
+    const where = this.buildNewsWhere(query);
 
     const [news, total] = await Promise.all([
       this.prisma.news.findMany({
         where,
+
         skip: (page - 1) * limit,
         take: limit,
 
-        orderBy: {
-          publishedAt: 'desc',
-        },
+        orderBy: [
+          {
+            publishedAt: 'desc',
+          },
+          {
+            createdAt: 'desc',
+          },
+        ],
 
         include: {
           category: true,
@@ -353,6 +350,7 @@ export class NewsService {
       where: {
         id,
       },
+
       include: {
         category: true,
         source: true,
@@ -371,7 +369,28 @@ export class NewsService {
     return news;
   }
 
-  remove(id: string) {
-    return `This action removes a #${id} news`;
+  async remove(id: string) {
+    const news = await this.prisma.news.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!news) {
+      throw new NotFoundException('News not found');
+    }
+
+    await this.prisma.news.delete({
+      where: {
+        id,
+      },
+    });
+
+    return {
+      message: 'News deleted successfully',
+    };
   }
 }

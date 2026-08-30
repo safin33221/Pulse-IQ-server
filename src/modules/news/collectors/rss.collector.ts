@@ -19,6 +19,7 @@ export class RssCollector {
   private readonly timeoutMs = 10_000;
   private readonly maxRetries = 2;
   private readonly retryDelayMs = 1_000;
+  private readonly maxItemsPerFeed = 100;
 
   async collect(feedUrl: string): Promise<CollectedArticle[]> {
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
@@ -27,9 +28,9 @@ export class RssCollector {
       } catch (error: unknown) {
         const attemptNumber = attempt + 1;
 
-        if (attempt >= this.maxRetries) {
+        if (attempt >= this.maxRetries || !this.isRetryableError(error)) {
           this.logger.error(
-            `RSS collection failed after ${attemptNumber} attempts: ${feedUrl}`,
+            `RSS collection failed after ${attemptNumber} attempt(s): ${feedUrl}`,
             error instanceof Error ? error.stack : String(error),
           );
 
@@ -60,6 +61,7 @@ export class RssCollector {
     try {
       const response = await fetch(feedUrl, {
         signal: controller.signal,
+
         headers: {
           'User-Agent': 'PulseIQ RSS Collector/1.0',
           Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
@@ -67,7 +69,10 @@ export class RssCollector {
       });
 
       if (!response.ok) {
-        throw new Error(`RSS request failed with status ${response.status}`);
+        throw new RssHttpError(
+          `RSS request failed with status ${response.status}`,
+          response.status,
+        );
       }
 
       const xml = await response.text();
@@ -75,24 +80,51 @@ export class RssCollector {
       const feed = await this.parser.parseString(xml);
 
       return feed.items
-        .filter((item) => Boolean(item.title && item.link))
+        .slice(0, this.maxItemsPerFeed)
+        .filter(
+          (item) =>
+            typeof item.title === 'string' &&
+            item.title.trim().length > 0 &&
+            typeof item.link === 'string' &&
+            item.link.trim().length > 0,
+        )
         .map((item) => ({
           title: item.title!.trim(),
+
           sourceUrl: item.link!.trim(),
-          summary: item.contentSnippet?.trim() ?? null,
-          content: item.content?.trim() ?? null,
-          imageUrl: item.enclosure?.url ?? null,
-          publishedAt: this.parseDate(item.pubDate),
+
+          summary:
+            typeof item.contentSnippet === 'string' ? item.contentSnippet.trim() || null : null,
+
+          content: typeof item.content === 'string' ? item.content.trim() || null : null,
+
+          imageUrl:
+            typeof item.enclosure?.url === 'string' ? item.enclosure.url.trim() || null : null,
+
+          publishedAt: this.parseDate(item.pubDate ?? item.isoDate),
         }));
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(`RSS feed timeout after ${this.timeoutMs}ms`);
+        throw new RssTimeoutError(`RSS feed timeout after ${this.timeoutMs}ms`);
       }
 
       throw error;
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private isRetryableError(error: unknown): boolean {
+    if (error instanceof RssTimeoutError) {
+      return true;
+    }
+
+    if (error instanceof RssHttpError) {
+      return [408, 429, 500, 502, 503, 504].includes(error.status);
+    }
+
+    // Network / parser / unknown errors can be transient.
+    return true;
   }
 
   private async delay(ms: number): Promise<void> {
@@ -109,5 +141,22 @@ export class RssCollector {
     const date = new Date(value);
 
     return Number.isNaN(date.getTime()) ? null : date;
+  }
+}
+
+class RssTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RssTimeoutError';
+  }
+}
+
+class RssHttpError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'RssHttpError';
   }
 }

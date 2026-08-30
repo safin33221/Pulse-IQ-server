@@ -16,8 +16,8 @@ const prisma = new PrismaClient({
 async function main() {
   await seedCategories(prisma);
   await seedNewsSources(prisma);
-  await seedNewsFeeds(prisma);
   await seedTopics(prisma);
+  await seedNewsFeeds(prisma);
   console.log('Database seeding completed');
 }
 

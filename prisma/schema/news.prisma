@@ -29,6 +29,7 @@ model NewsInteraction {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
 
+
   @@index([userId, createdAt])
   @@index([userId, newsId])
   @@index([newsId, type])
@@ -76,6 +77,7 @@ model NewsFeed {
 
   @@index([sourceId])
   @@index([isActive])
+  @@index([isActive, sourceId])
 }
 
 model Topic {
@@ -121,6 +123,9 @@ model News {
   @@index([publishedAt])
   @@index([status])
   @@index([collectedAt])
+  @@index([status, publishedAt, createdAt])
+  @@index([status, categoryId, publishedAt, createdAt])
+  @@index([status, sourceId, publishedAt, createdAt])
 }
 
 model NewsTopic {
