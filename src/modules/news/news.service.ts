@@ -15,6 +15,7 @@ import { KeywordTopicExtractor } from './extractors/keyword-topic.extractor';
 import { NewsRankingService } from './services/news-ranking.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { Prisma } from '@prisma/client';
 
 interface FeedCollectionResult {
   feedId: string;
@@ -24,6 +25,14 @@ interface FeedCollectionResult {
   duplicates: number;
   failed: boolean;
 }
+
+type PersonalizedNews = Prisma.NewsGetPayload<{
+  include: {
+    category: true;
+    source: true;
+    topics: { include: { topic: true } };
+  };
+}>;
 
 @Injectable()
 export class NewsService {
@@ -424,16 +433,210 @@ export class NewsService {
     };
   }
 
+  private async findForYouNews(userId: string, page: number, limit: number) {
+    const [user, interactions] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          profile: {
+            include: {
+              careerField: true,
+              currentRole: true,
+              careerGoals: { include: { careerGoal: true } },
+            },
+          },
+          topicInterests: true,
+          skillInterests: { include: { skill: true } },
+          careerInterests: { include: { careerField: true } },
+        },
+      }),
+      this.prisma.newsInteraction.findMany({
+        where: {
+          userId,
+          createdAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) },
+        },
+        select: {
+          newsId: true,
+          type: true,
+          news: {
+            select: {
+              categoryId: true,
+              sourceId: true,
+              topics: { select: { topicId: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+    ]);
+
+    const hiddenNewsIds = interactions
+      .filter(({ type }) => type === 'HIDE' || type === 'NOT_INTERESTED')
+      .map(({ newsId }) => newsId);
+
+    const positiveInteractions = interactions.filter(({ type }) =>
+      ['VIEW', 'CLICK', 'LIKE', 'SAVE', 'SHARE'].includes(type),
+    );
+
+    const followedTopicIds = user?.topicInterests.map(({ topicId }) => topicId) ?? [];
+    const skillTerms = user?.skillInterests.map(({ skill }) => skill.name) ?? [];
+    const careerInterestTerms =
+      user?.careerInterests.map(({ careerField }) => careerField.name) ?? [];
+    const careerTerms = [
+      user?.profile?.careerField?.name,
+      user?.profile?.currentRole?.name,
+      ...(user?.profile?.careerGoals.map(({ careerGoal }) => careerGoal.name) ?? []),
+    ].filter((term): term is string => Boolean(term));
+
+    const behaviorTopicIds = new Set(
+      positiveInteractions.flatMap(({ news }) => news.topics.map(({ topicId }) => topicId)),
+    );
+    const behaviorCategoryIds = new Set(positiveInteractions.map(({ news }) => news.categoryId));
+    const behaviorSourceIds = new Set(positiveInteractions.map(({ news }) => news.sourceId));
+
+    const hasPersonalizationSignals =
+      careerTerms.length > 0 ||
+      careerInterestTerms.length > 0 ||
+      skillTerms.length > 0 ||
+      followedTopicIds.length > 0 ||
+      positiveInteractions.length > 0;
+
+    const candidateLimit = Math.min(Math.max(page * limit * 3, 60), 200);
+    const include = {
+      category: true,
+      source: true,
+      topics: { include: { topic: true } },
+    } satisfies Prisma.NewsInclude;
+    const latestWhere: Prisma.NewsWhereInput = {
+      status: 'PUBLISHED',
+      ...(hiddenNewsIds.length > 0 && { id: { notIn: hiddenNewsIds } }),
+    };
+
+    if (!hasPersonalizationSignals) {
+      const [data, total] = await Promise.all([
+        this.prisma.news.findMany({
+          where: latestWhere,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+          include,
+        }),
+        this.prisma.news.count({ where: latestWhere }),
+      ]);
+
+      return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    }
+
+    const textTerms = [...new Set([...careerTerms, ...careerInterestTerms, ...skillTerms])].slice(
+      0,
+      20,
+    );
+    const candidateFilters: Prisma.NewsWhereInput[] = [
+      ...(followedTopicIds.length > 0
+        ? [{ topics: { some: { topicId: { in: followedTopicIds } } } }]
+        : []),
+      ...textTerms.map((term) => ({
+        OR: [
+          { title: { contains: term, mode: 'insensitive' as const } },
+          { summary: { contains: term, mode: 'insensitive' as const } },
+          { content: { contains: term, mode: 'insensitive' as const } },
+        ],
+      })),
+    ];
+
+    const [matchedNews, latestNews] = await Promise.all([
+      candidateFilters.length > 0
+        ? this.prisma.news.findMany({
+            where: { ...latestWhere, OR: candidateFilters },
+            take: candidateLimit,
+            orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+            include,
+          })
+        : Promise.resolve([] as PersonalizedNews[]),
+      this.prisma.news.findMany({
+        where: latestWhere,
+        take: candidateLimit,
+        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+        include,
+      }),
+    ]);
+
+    const candidates = [
+      ...new Map([...matchedNews, ...latestNews].map((news) => [news.id, news])).values(),
+    ];
+    const ranked = candidates
+      .map((news) => ({
+        news,
+        score: this.calculateNewsScore(news, {
+          careerTerms,
+          careerInterestTerms,
+          skillTerms,
+          followedTopicIds: new Set(followedTopicIds),
+          behaviorTopicIds,
+          behaviorCategoryIds,
+          behaviorSourceIds,
+        }),
+      }))
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          (b.news.publishedAt?.getTime() ?? b.news.createdAt.getTime()) -
+            (a.news.publishedAt?.getTime() ?? a.news.createdAt.getTime()),
+      );
+
+    const total = ranked.length;
+    const start = (page - 1) * limit;
+    return {
+      data: ranked.slice(start, start + limit).map(({ news }) => news),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  private calculateNewsScore(
+    news: PersonalizedNews,
+    signals: {
+      careerTerms: string[];
+      careerInterestTerms: string[];
+      skillTerms: string[];
+      followedTopicIds: Set<string>;
+      behaviorTopicIds: Set<string>;
+      behaviorCategoryIds: Set<string>;
+      behaviorSourceIds: Set<string>;
+    },
+  ): number {
+    const text = [news.title, news.summary, news.content].filter(Boolean).join(' ').toLowerCase();
+    const matchesText = (terms: string[]) =>
+      terms.some((term) => text.includes(term.toLowerCase()));
+    const topicIds = news.topics.map(({ topicId }) => topicId);
+    let score = 0;
+
+    if (matchesText(signals.careerTerms)) score += 30;
+    if (topicIds.some((topicId) => signals.followedTopicIds.has(topicId))) score += 25;
+    if (matchesText(signals.skillTerms)) score += 20;
+    if (matchesText(signals.careerInterestTerms)) score += 15;
+    if (
+      topicIds.some((topicId) => signals.behaviorTopicIds.has(topicId)) ||
+      signals.behaviorCategoryIds.has(news.categoryId) ||
+      signals.behaviorSourceIds.has(news.sourceId)
+    ) {
+      score += 10;
+    }
+
+    return score;
+  }
+
   async findFeed(query: NewsQueryDto, userId?: string) {
     const { category = 'foryou', page = 1, limit = 20 } = query;
+    const isForYouCategory = category === 'foryou' || category === 'for-you';
 
-    // For You feed
-    if (category === 'foryou') {
+    // Category-based For You logic belongs to this feed API.
+    if (isForYouCategory) {
       if (!userId) {
         throw new UnauthorizedException('Authentication required for For You feed');
       }
 
-      return this.newsRankingService.getPersonalizedFeed(userId, page, limit);
+      return this.findForYouNews(userId, page, limit);
     }
 
     // Validate category from database

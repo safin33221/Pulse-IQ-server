@@ -17,22 +17,8 @@ enum NewsInteractionType {
   LIKE
   SAVE
   SHARE
-}
-
-model NewsInteraction {
-  id        String              @id @default(cuid())
-  userId    String
-  newsId    String
-  type      NewsInteractionType
-  createdAt DateTime            @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
-
-
-  @@index([userId, createdAt])
-  @@index([userId, newsId])
-  @@index([newsId, type])
+  HIDE
+  NOT_INTERESTED
 }
 
 model Category {
@@ -80,17 +66,6 @@ model NewsFeed {
   @@index([isActive, sourceId])
 }
 
-model Topic {
-  id   String @id @default(cuid())
-  name String @unique
-  slug String @unique
-
-  news NewsTopic[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model News {
   id        String  @id @default(cuid())
   title     String
@@ -113,9 +88,10 @@ model News {
 
   topics NewsTopic[]
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
   newsInteractions NewsInteraction[]
+  recommendations  UserRecommendation[]
 
   @@index([processingStatus])
   @@index([categoryId])

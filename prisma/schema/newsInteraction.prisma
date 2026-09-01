@@ -1,0 +1,16 @@
+model NewsInteraction {
+  id               String              @id @default(uuid())
+  userId           String
+  newsId           String
+  type             NewsInteractionType
+  duration         Int?
+  scrollPercentage Int?
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  news             News                @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  createdAt        DateTime            @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, newsId])
+  @@index([newsId, type])
+  @@index([type])
+}
