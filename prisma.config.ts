@@ -9,7 +9,9 @@ export default defineConfig({
     seed: 'tsx prisma/seed.ts',
   },
   datasource: {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    url: env('DATABASE_URL'),
+    // Use Neon's direct URL for Prisma CLI commands. DATABASE_URL remains the
+    // pooled runtime URL; the fallback keeps the local setup unchanged.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    url: process.env.DIRECT_URL ?? env('DATABASE_URL'),
   },
 });

@@ -1,3 +1,15 @@
+## Database URLs in production
+
+For Neon deployments, configure two URLs:
+
+- `DATABASE_URL`: Neon's pooled connection string (hostname contains
+  `-pooler`), used by the running application.
+- `DIRECT_URL`: Neon's direct, non-pooled connection string, used by Prisma
+  migrations.
+
+On Render, use `pnpm prisma migrate deploy` as the **Pre-Deploy Command** when
+available. Do not run migrations from multiple services or deployments at once.
+
                     User
                       │
                ┌──────┴──────┐
