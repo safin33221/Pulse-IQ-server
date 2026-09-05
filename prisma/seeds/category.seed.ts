@@ -2,14 +2,61 @@ import { PrismaClient } from '@prisma/client';
 
 export async function seedCategories(prisma: PrismaClient) {
   const categories = [
+    // ==========================================
+    // 💻 TECHNOLOGY
+    // ==========================================
     {
       name: 'Technology',
       slug: 'technology',
     },
     {
-      name: 'AI',
+      name: 'Web Development',
+      slug: 'web',
+    },
+    {
+      name: 'Software',
+      slug: 'software',
+    },
+    {
+      name: 'Mobile & Apps',
+      slug: 'app',
+    },
+    {
+      name: 'Cloud Computing',
+      slug: 'cloud',
+    },
+    {
+      name: 'DevOps',
+      slug: 'devops',
+    },
+    {
+      name: 'Programming',
+      slug: 'programming',
+    },
+
+    // ==========================================
+    // 🤖 AI
+    // ==========================================
+    {
+      name: 'Artificial Intelligence',
       slug: 'ai',
     },
+    {
+      name: 'Machine Learning',
+      slug: 'machine-learning',
+    },
+
+    // ==========================================
+    // 🔐 SECURITY
+    // ==========================================
+    {
+      name: 'Cybersecurity',
+      slug: 'cybersecurity',
+    },
+
+    // ==========================================
+    // 🚀 BUSINESS & STARTUPS
+    // ==========================================
     {
       name: 'Business',
       slug: 'business',
@@ -19,9 +66,21 @@ export async function seedCategories(prisma: PrismaClient) {
       slug: 'finance',
     },
     {
-      name: 'Science',
-      slug: 'science',
+      name: 'Startups',
+      slug: 'startups',
     },
+
+    // ==========================================
+    // 🇧🇩 BANGLADESH
+    // ==========================================
+    {
+      name: 'Bangladesh',
+      slug: 'bangladesh',
+    },
+
+    // ==========================================
+    // 🌍 WORLD
+    // ==========================================
     {
       name: 'World',
       slug: 'world',
@@ -30,25 +89,13 @@ export async function seedCategories(prisma: PrismaClient) {
       name: 'Politics',
       slug: 'politics',
     },
+
+    // ==========================================
+    // 🔬 SCIENCE
+    // ==========================================
     {
-      name: 'Health',
-      slug: 'health',
-    },
-    {
-      name: 'Sports',
-      slug: 'sports',
-    },
-    {
-      name: 'Entertainment',
-      slug: 'entertainment',
-    },
-    {
-      name: 'Gaming',
-      slug: 'gaming',
-    },
-    {
-      name: 'Cybersecurity',
-      slug: 'cybersecurity',
+      name: 'Science',
+      slug: 'science',
     },
     {
       name: 'Space',
@@ -58,9 +105,41 @@ export async function seedCategories(prisma: PrismaClient) {
       name: 'Climate',
       slug: 'climate',
     },
+
+    // ==========================================
+    // ❤️ HEALTH
+    // ==========================================
     {
-      name: 'Startups',
-      slug: 'startups',
+      name: 'Health',
+      slug: 'health',
+    },
+
+    // ==========================================
+    // 🎮 ENTERTAINMENT
+    // ==========================================
+    {
+      name: 'Gaming',
+      slug: 'gaming',
+    },
+    {
+      name: 'Entertainment',
+      slug: 'entertainment',
+    },
+
+    // ==========================================
+    // ⚽ SPORTS
+    // ==========================================
+    {
+      name: 'Sports',
+      slug: 'sports',
+    },
+
+    // ==========================================
+    // 💼 CAREER
+    // ==========================================
+    {
+      name: 'Tech Jobs',
+      slug: 'jobs',
     },
   ];
 

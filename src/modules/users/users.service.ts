@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '@prisma/client';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 const safeUserSelect = {
   id: true,
@@ -13,8 +14,6 @@ const safeUserSelect = {
   role: true,
   status: true,
   emailVerified: true,
-  interests: true,
-  preferences: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.UserSelect;
@@ -76,5 +75,9 @@ export class UsersService {
         refreshToken,
       },
     });
+  }
+
+  updateUser(userId: string, dto: UpdateUserDto) {
+    throw new Error('Method not implemented.');
   }
 }

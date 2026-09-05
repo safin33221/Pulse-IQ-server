@@ -36,61 +36,71 @@ enum EmploymentStatus {
 }
 
 model User {
-  id        String     @id @default(uuid())
-  email     String     @unique
-  password  String?
-  username  String?    @unique
+  id       String  @id @default(uuid())
+  email    String  @unique
+  password String?
+  username String? @unique
+
+  // Basic profile
   firstName String?
   lastName  String?
   avatar    String?
   bio       String?
-  role      UserRole   @default(USER)
-  status    UserStatus @default(ACTIVE)
 
-  // Existing columns: retained so users and authentication data remain intact.
+  // Account
+  role         UserRole   @default(USER)
+  status       UserStatus @default(ACTIVE)
   refreshToken String?
-  interests    String[]
-  preferences  Json?
 
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  deletedAt     DateTime?
+
+  // Relations
   profile            UserProfile?
   preferenceSettings UserPreference?
-  refreshTokens      RefreshToken[]
-  interactions       NewsInteraction[]
-  topicInterests     UserTopicInterest[]
-  skillInterests     UserSkillInterest[]
-  careerInterests    UserCareerInterest[]
-  recommendations    UserRecommendation[]
-  behaviorProfile    UserBehaviorProfile?
-  emailVerified      Boolean              @default(false)
-  lastLoginAt        DateTime?
-  deletedAt          DateTime?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
 
-  @@index([email])
-  @@index([username])
-  @@index([refreshToken])
+  refreshTokens RefreshToken[]
+  interactions  NewsInteraction[]
+
+  topicInterests  UserTopicInterest[]
+  skillInterests  UserSkillInterest[]
+  careerInterests UserCareerInterest[]
+
+  behaviorProfile UserBehaviorProfile?
+  recommendations UserRecommendation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([status])
   @@index([role])
   @@index([createdAt])
 }
 
 model UserProfile {
-  id               String            @id @default(cuid())
-  userId           String            @unique
+  id     String @id @default(cuid())
+  userId String @unique
+
   careerFieldId    String?
   currentRoleId    String?
   experienceLevel  ExperienceLevel?
   employmentStatus EmploymentStatus?
-  countryCode      String?
-  city             String?
-  timezone         String?
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  careerField      CareerField?      @relation(fields: [careerFieldId], references: [id])
-  currentRole      CareerRole?       @relation(fields: [currentRoleId], references: [id])
-  careerGoals      UserCareerGoal[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+
+  countryCode String?
+  city        String?
+  timezone    String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  careerField CareerField? @relation(fields: [careerFieldId], references: [id])
+
+  currentRole CareerRole? @relation(fields: [currentRoleId], references: [id])
+
+  careerGoals UserCareerGoal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([careerFieldId])
   @@index([currentRoleId])
@@ -99,73 +109,87 @@ model UserProfile {
 }
 
 model CareerField {
-  id            String               @id @default(cuid())
-  name          String               @unique
-  slug          String               @unique
-  description   String?
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+
   profiles      UserProfile[]
   roles         CareerRole[]
   userInterests UserCareerInterest[]
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CareerRole {
-  id            String        @id @default(cuid())
-  name          String        @unique
-  slug          String        @unique
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
   careerFieldId String
-  careerField   CareerField   @relation(fields: [careerFieldId], references: [id], onDelete: Cascade)
+  careerField   CareerField?  @relation(fields: [careerFieldId], references: [id])
   profiles      UserProfile[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([careerFieldId])
 }
 
 model Skill {
-  id        String              @id @default(cuid())
-  name      String              @unique
-  slug      String              @unique
-  users     UserSkillInterest[]
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  users UserSkillInterest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model UserSkillInterest {
   userId  String
   skillId String
-  weight  Float  @default(1)
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  weight Float @default(1)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@id([userId, skillId])
   @@index([skillId])
 }
 
 model Topic {
-  id            String              @id @default(cuid())
-  name          String              @unique
-  slug          String              @unique
-  parentId      String?
-  parent        Topic?              @relation("TopicHierarchy", fields: [parentId], references: [id])
-  children      Topic[]             @relation("TopicHierarchy")
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  parentId String?
+
+  parent   Topic?  @relation("TopicHierarchy", fields: [parentId], references: [id])
+  children Topic[] @relation("TopicHierarchy")
+
   news          NewsTopic[]
   userInterests UserTopicInterest[]
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([parentId])
 }
 
 model UserTopicInterest {
-  userId        String
-  topicId       String
+  userId  String
+  topicId String
+
   weight        Float          @default(0.5)
   source        InterestSource @default(EXPLICIT)
   lastUpdatedAt DateTime       @default(now())
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  topic         Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@id([userId, topicId])
   @@index([topicId])
@@ -173,45 +197,58 @@ model UserTopicInterest {
 }
 
 model CareerGoal {
-  id    String           @id @default(cuid())
-  name  String           @unique
-  slug  String           @unique
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
   users UserCareerGoal[]
 }
 
 model UserCareerGoal {
   userProfileId String
   careerGoalId  String
-  priority      Int         @default(1)
-  userProfile   UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
-  careerGoal    CareerGoal  @relation(fields: [careerGoalId], references: [id], onDelete: Cascade)
+
+  priority Int @default(1)
+
+  userProfile UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  careerGoal  CareerGoal  @relation(fields: [careerGoalId], references: [id], onDelete: Cascade)
 
   @@id([userProfileId, careerGoalId])
 }
 
 model UserPreference {
-  userId                 String   @id
-  language               String   @default("en")
-  showBreakingNews       Boolean  @default(true)
-  showCareerNews         Boolean  @default(true)
-  notificationsEnabled   Boolean  @default(true)
-  pushNotifications      Boolean  @default(true)
-  emailNotifications     Boolean  @default(false)
-  personalizationEnabled Boolean  @default(true)
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  userId String @id
+
+  language String @default("en")
+
+  showBreakingNews Boolean @default(true)
+  showCareerNews   Boolean @default(true)
+
+  notificationsEnabled Boolean @default(true)
+  pushNotifications    Boolean @default(true)
+  emailNotifications   Boolean @default(false)
+
+  personalizationEnabled Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model UserCareerInterest {
   userId        String
   careerFieldId String
-  weight        Float          @default(0.5)
-  source        InterestSource @default(EXPLICIT)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  careerField   CareerField    @relation(fields: [careerFieldId], references: [id], onDelete: Cascade)
+
+  weight Float          @default(0.5)
+  source InterestSource @default(EXPLICIT)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  careerField CareerField @relation(fields: [careerFieldId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@id([userId, careerFieldId])
   @@index([careerFieldId])
@@ -219,41 +256,55 @@ model UserCareerInterest {
 }
 
 model UserBehaviorProfile {
-  userId              String    @id
-  totalViews          Int       @default(0)
-  totalClicks         Int       @default(0)
-  totalLikes          Int       @default(0)
-  totalSaves          Int       @default(0)
-  totalShares         Int       @default(0)
-  totalReadingTimeMs  BigInt    @default(0)
-  avgReadingTimeMs    Float     @default(0)
-  avgScrollPercentage Float     @default(0)
-  firstActiveAt       DateTime?
-  lastActiveAt        DateTime?
-  profileVersion      Int       @default(1)
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  userId String @id
+
+  totalViews  Int @default(0)
+  totalClicks Int @default(0)
+  totalLikes  Int @default(0)
+  totalSaves  Int @default(0)
+  totalShares Int @default(0)
+
+  totalReadingTimeMs BigInt @default(0)
+
+  avgReadingTimeMs    Float @default(0)
+  avgScrollPercentage Float @default(0)
+
+  firstActiveAt DateTime?
+  lastActiveAt  DateTime?
+
+  profileVersion Int @default(1)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model UserRecommendation {
-  id              String    @id @default(cuid())
-  userId          String
-  newsId          String
-  score           Float
-  topicScore      Float     @default(0)
-  careerScore     Float     @default(0)
-  skillScore      Float     @default(0)
-  behaviorScore   Float     @default(0)
-  freshnessScore  Float     @default(0)
-  popularityScore Float     @default(0)
-  semanticScore   Float     @default(0)
-  rank            Int
-  reason          String?
-  generatedAt     DateTime  @default(now())
-  expiresAt       DateTime?
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  news            News      @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  newsId String
+
+  score Float
+
+  topicScore      Float @default(0)
+  careerScore     Float @default(0)
+  skillScore      Float @default(0)
+  behaviorScore   Float @default(0)
+  freshnessScore  Float @default(0)
+  popularityScore Float @default(0)
+  semanticScore   Float @default(0)
+
+  rank Int
+
+  reason String?
+
+  generatedAt DateTime  @default(now())
+  expiresAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
 
   @@unique([userId, newsId])
   @@index([userId, rank])

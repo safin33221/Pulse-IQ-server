@@ -11,7 +11,7 @@ export class NewsScheduler {
 
   constructor(private readonly newsService: NewsService) {}
 
-  @Cron(CronExpression.EVERY_2_HOURS)
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async collectNews(): Promise<void> {
     if (this.isRunning) {
       this.logger.warn('News collection already running. Skipping...');
