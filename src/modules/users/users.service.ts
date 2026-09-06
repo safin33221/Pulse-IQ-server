@@ -77,7 +77,21 @@ export class UsersService {
     });
   }
 
-  updateUser(userId: string, dto: UpdateUserDto) {
-    throw new Error('Method not implemented.');
+  async updateUser(userId: string, dto: UpdateUserDto) {
+    const { profile, firstName, lastName, username, avatar, bio } = dto;
+
+    return this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        ...(firstName !== undefined ? { firstName } : {}),
+        ...(lastName !== undefined ? { lastName } : {}),
+        ...(username !== undefined ? { username } : {}),
+        ...(avatar !== undefined ? { avatar } : {}),
+        ...(bio !== undefined ? { bio } : {}),
+        ...(profile ? { profile: { update: profile } } : {}),
+      },
+    });
   }
 }
