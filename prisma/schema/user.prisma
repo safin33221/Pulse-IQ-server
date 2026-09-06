@@ -44,6 +44,7 @@ model User {
   // Basic profile
   firstName String?
   lastName  String?
+  name      String?
   avatar    String?
   bio       String?
 

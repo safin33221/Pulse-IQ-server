@@ -7,8 +7,7 @@ const safeUserSelect = {
   id: true,
   email: true,
   username: true,
-  firstName: true,
-  lastName: true,
+  name: true,
   avatar: true,
   bio: true,
   role: true,
@@ -78,20 +77,21 @@ export class UsersService {
   }
 
   async updateUser(userId: string, dto: UpdateUserDto) {
-    const { profile, firstName, lastName, username, avatar, bio } = dto;
-
-    return this.prisma.user.update({
+    const user = await this.prisma.user.update({
       where: {
         id: userId,
       },
-      data: {
-        ...(firstName !== undefined ? { firstName } : {}),
-        ...(lastName !== undefined ? { lastName } : {}),
-        ...(username !== undefined ? { username } : {}),
-        ...(avatar !== undefined ? { avatar } : {}),
-        ...(bio !== undefined ? { bio } : {}),
-        ...(profile ? { profile: { update: profile } } : {}),
+      data: dto,
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        name: true,
+        avatar: true,
+        bio: true,
+        updatedAt: true,
       },
     });
+    return user;
   }
 }

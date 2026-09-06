@@ -26,15 +26,17 @@ export class AuthService {
     if (exists) {
       throw new ConflictException('Email already exists');
     }
+    console.log(dto);
     const hashedPassword = await bcrypt.hash(dto.password, 12);
-
+    const userName = dto.email.split('@')[0];
     const user = await this.usersService.create({
       email: dto.email,
       password: hashedPassword,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
+      name: dto.name,
+      username: userName,
     });
 
+    console.log(user);
     return {
       message: 'Registration successful',
       user,
